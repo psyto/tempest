@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  --regime-very-low: #22c55e;
+  --regime-low: #3b82f6;
+  --regime-normal: #eab308;
+  --regime-high: #f97316;
+  --regime-extreme: #ef4444;
+
+  --bg-primary: #0a0a0f;
+  --bg-card: #111118;
+  --bg-card-hover: #1a1a24;
+  --border: #27272a;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
