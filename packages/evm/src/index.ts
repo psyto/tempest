@@ -1,9 +1,12 @@
 export { TempestClient } from "./TempestClient.js";
 export { getVolatility, getRegime, getVolState } from "./oracle.js";
 export { getCurrentFee } from "./fees.js";
-export { getRecommendedRange, estimateIL } from "./lp.js";
+export { getRecommendedRange } from "./lp.js";
 export { TempestHookABI } from "./abis/TempestHook.js";
+
+// Re-export core types so consumers don't need to depend on @tempest/core directly
 export {
+  estimateIL,
   Regime,
   REGIME_NAMES,
   REGIME_COLORS,
@@ -12,4 +15,4 @@ export {
   type PoolInfo,
   type VolSample,
   type RecommendedRange,
-} from "./types.js";
+} from "@tempest/core";

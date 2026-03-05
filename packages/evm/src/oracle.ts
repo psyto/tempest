@@ -1,6 +1,6 @@
 import type { PublicClient, Address } from "viem";
 import { TempestHookABI } from "./abis/TempestHook.js";
-import { Regime, type VolState } from "./types.js";
+import { Regime, type VolState } from "@tempest/core";
 
 export async function getVolatility(
   client: PublicClient,

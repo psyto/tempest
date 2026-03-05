@@ -2,9 +2,8 @@ import type { PublicClient, Address } from "viem";
 import { TempestHookABI } from "./abis/TempestHook.js";
 import { getVolatility, getRegime, getVolState } from "./oracle.js";
 import { getCurrentFee } from "./fees.js";
-import { getRecommendedRange, estimateIL } from "./lp.js";
-import type { VolState, RecommendedRange } from "./types.js";
-import { Regime } from "./types.js";
+import { getRecommendedRange } from "./lp.js";
+import { estimateIL, type VolState, type RecommendedRange, Regime } from "@tempest/core";
 
 export class TempestClient {
   private client: PublicClient;
