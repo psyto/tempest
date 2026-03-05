@@ -6,69 +6,13 @@ import {
   type PublicClient,
   type WalletClient,
   type Chain,
+  type Account,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet, sepolia } from "viem/chains";
+import { TempestHookABI, REGIME_NAMES } from "@tempest/evm";
 import type { KeeperConfig } from "./config.js";
 import { shouldUpdate } from "./gas-oracle.js";
-
-const TEMPEST_HOOK_ABI = [
-  {
-    name: "updateVolatility",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "poolId", type: "bytes32" }],
-    outputs: [],
-  },
-  {
-    name: "getVolatility",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "poolId", type: "bytes32" }],
-    outputs: [
-      { name: "currentVol", type: "uint64" },
-      { name: "regime", type: "uint8" },
-      { name: "ema7d", type: "uint64" },
-      { name: "ema30d", type: "uint64" },
-    ],
-  },
-  {
-    name: "getVolState",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "poolId", type: "bytes32" }],
-    outputs: [
-      {
-        name: "",
-        type: "tuple",
-        components: [
-          { name: "currentVol", type: "uint64" },
-          { name: "ema30d", type: "uint64" },
-          { name: "ema7d", type: "uint64" },
-          { name: "lastUpdate", type: "uint32" },
-          { name: "regime", type: "uint8" },
-          { name: "sampleCount", type: "uint16" },
-        ],
-      },
-    ],
-  },
-  {
-    name: "minUpdateInterval",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint32" }],
-  },
-  {
-    name: "isPoolInitialized",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "poolId", type: "bytes32" }],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
-
-const REGIME_NAMES = ["VeryLow", "Low", "Normal", "High", "Extreme"] as const;
 
 function getChain(chainId: number): Chain {
   switch (chainId) {
@@ -84,24 +28,26 @@ function getChain(chainId: number): Chain {
 export class TempestKeeper {
   private publicClient: PublicClient;
   private walletClient: WalletClient;
+  private chain: Chain;
+  private account: Account;
   private config: KeeperConfig;
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private lastRegimes: Map<string, number> = new Map();
 
   constructor(config: KeeperConfig) {
     this.config = config;
-    const chain = getChain(config.chainId);
-    const account = privateKeyToAccount(config.privateKey);
+    this.chain = getChain(config.chainId);
+    this.account = privateKeyToAccount(config.privateKey);
 
     this.publicClient = createPublicClient({
-      chain,
+      chain: this.chain,
       transport: http(config.rpcUrl),
     });
 
     this.walletClient = createWalletClient({
-      chain,
+      chain: this.chain,
       transport: http(config.rpcUrl),
-      account,
+      account: this.account,
     });
   }
 
@@ -159,7 +105,7 @@ export class TempestKeeper {
     // Check if pool is initialized
     const initialized = await this.publicClient.readContract({
       address: this.config.hookAddress,
-      abi: TEMPEST_HOOK_ABI,
+      abi: TempestHookABI,
       functionName: "isPoolInitialized",
       args: [poolId],
     });
@@ -172,7 +118,7 @@ export class TempestKeeper {
     // Check vol state
     const volState = await this.publicClient.readContract({
       address: this.config.hookAddress,
-      abi: TEMPEST_HOOK_ABI,
+      abi: TempestHookABI,
       functionName: "getVolState",
       args: [poolId],
     });
@@ -182,7 +128,7 @@ export class TempestKeeper {
 
     const minInterval = await this.publicClient.readContract({
       address: this.config.hookAddress,
-      abi: TEMPEST_HOOK_ABI,
+      abi: TempestHookABI,
       functionName: "minUpdateInterval",
     });
 
@@ -196,8 +142,10 @@ export class TempestKeeper {
     console.log(`  Updating pool ${poolId.slice(0, 10)}...`);
 
     const hash = await this.walletClient.writeContract({
+      chain: this.chain,
+      account: this.account,
       address: this.config.hookAddress,
-      abi: TEMPEST_HOOK_ABI,
+      abi: TempestHookABI,
       functionName: "updateVolatility",
       args: [poolId],
     });
@@ -210,18 +158,18 @@ export class TempestKeeper {
     // Read updated vol state
     const [currentVol, regime] = await this.publicClient.readContract({
       address: this.config.hookAddress,
-      abi: TEMPEST_HOOK_ABI,
+      abi: TempestHookABI,
       functionName: "getVolatility",
       args: [poolId],
     });
 
-    const regimeName = REGIME_NAMES[Number(regime)] ?? "Unknown";
+    const regimeName = REGIME_NAMES[Number(regime) as keyof typeof REGIME_NAMES] ?? "Unknown";
     const volPct = (Number(currentVol) / 100).toFixed(2);
 
     // Detect regime change
     const prevRegime = this.lastRegimes.get(poolId);
     if (prevRegime !== undefined && prevRegime !== Number(regime)) {
-      console.log(`  ⚡ REGIME CHANGE: ${REGIME_NAMES[prevRegime]} → ${regimeName}`);
+      console.log(`  ⚡ REGIME CHANGE: ${REGIME_NAMES[prevRegime as keyof typeof REGIME_NAMES]} → ${regimeName}`);
     }
     this.lastRegimes.set(poolId, Number(regime));
 
@@ -229,9 +177,8 @@ export class TempestKeeper {
   }
 
   private async checkBalance(): Promise<void> {
-    const account = privateKeyToAccount(this.config.privateKey);
     const balance = await this.publicClient.getBalance({
-      address: account.address,
+      address: this.account.address,
     });
     const ethBalance = formatEther(balance);
     console.log(`  Keeper balance: ${ethBalance} ETH`);
