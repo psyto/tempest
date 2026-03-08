@@ -14,3 +14,5 @@ export {
   type VolSample,
   type RecommendedRange,
 } from "./types.js";
+export { TempestClient } from "./client.js";
+export type { Chain, ChainAdapter } from "./adapter.js";

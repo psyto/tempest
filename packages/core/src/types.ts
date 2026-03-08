@@ -47,7 +47,7 @@ export interface FeeConfig {
 }
 
 export interface PoolInfo {
-  poolId: `0x${string}`;
+  poolId: string;
   initialized: boolean;
 }
 
