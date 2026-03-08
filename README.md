@@ -67,22 +67,29 @@ tempest/
 │   │   └── src/
 │   │       ├── types.ts    # Regime, VolState, FeeConfig, PoolInfo, VolSample
 │   │       └── lp.ts       # estimateIL() — concentrated liquidity IL estimation
-│   └── evm/                # @tempest/evm — EVM client (depends on @tempest/core + viem)
+│   ├── evm/                # @tempest/evm — EVM client (depends on @tempest/core + viem)
+│   │   └── src/
+│   │       ├── TempestClient.ts   # PublicClient facade
+│   │       ├── fees.ts            # getCurrentFee()
+│   │       ├── oracle.ts          # getVolatility(), getRegime(), getVolState()
+│   │       ├── lp.ts              # getRecommendedRange()
+│   │       └── abis/              # Contract ABIs
+│   └── qn-addon/            # @tempest/qn-addon — QuickNode Marketplace add-on
+│       ├── addon.json        # QN Marketplace manifest (slug: fabrknt-dynamic-fees)
 │       └── src/
-│           ├── TempestClient.ts   # PublicClient facade
-│           ├── fees.ts            # getCurrentFee()
-│           ├── oracle.ts          # getVolatility(), getRegime(), getVolState()
-│           ├── lp.ts              # getRecommendedRange()
-│           └── abis/              # Contract ABIs
+│           └── server.ts     # Express API (volatility, fees, LP advisory routes)
 ├── apps/
 │   ├── keeper/             # Off-chain keeper service (TypeScript/viem)
 │   └── dashboard/          # Next.js 15 frontend
 ```
 
+The monorepo is managed with **pnpm** (v10.31.0) and **turbo** for build orchestration. Internal dependencies use the `workspace:*` protocol.
+
 The SDK is split into two packages:
 
 - **`@tempest/core`** — Pure TypeScript types and algorithms with zero dependencies. Use this when you only need volatility types (e.g., `Regime`, `VolState`) or pure math (`estimateIL`) without any chain interaction.
 - **`@tempest/evm`** — EVM-specific client built on viem. Depends on `@tempest/core` and re-exports all of its types for convenience.
+- **`@tempest/qn-addon`** — QuickNode Marketplace add-on (slug: `fabrknt-dynamic-fees`). An Express server exposing Tempest's volatility engine as a hosted API. Depends on `@tempest/core`.
 
 ## Contracts
 
@@ -117,11 +124,18 @@ Main Uniswap v4 hook tying everything together:
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
 - Node.js 18+
+- [pnpm](https://pnpm.io/installation) 10.31.0+
 
 ### Install Dependencies
 
 ```bash
-npm install   # installs all workspace packages
+pnpm install   # installs all workspace packages
+```
+
+### Build
+
+```bash
+pnpm build     # runs turbo across all packages
 ```
 
 ### Build & Test Contracts
@@ -137,7 +151,7 @@ forge test --gas-report
 
 ```bash
 cd packages/core
-npm test
+pnpm test
 ```
 
 ### Run Keeper
@@ -145,14 +159,14 @@ npm test
 ```bash
 cd apps/keeper
 cp .env.example .env  # Configure RPC_URL, PRIVATE_KEY, HOOK_ADDRESS, POOL_IDS
-npm start
+pnpm start
 ```
 
 ### Run Dashboard
 
 ```bash
 cd apps/dashboard
-npm run dev
+pnpm run dev
 ```
 
 The dashboard runs with mock data by default — connect it to a deployed hook via `@tempest/evm` for live data.
@@ -198,6 +212,31 @@ const range = await tempest.getRecommendedRange(poolId, currentTick);
 3. **Create pool** — Initialize a Uniswap v4 pool with `fee: LPFeeLibrary.DYNAMIC_FEE_FLAG` and `hooks: <tempest_address>`
 
 4. **Start keeper** — Run the keeper service to periodically update volatility
+
+## QuickNode Marketplace Add-on
+
+The `packages/qn-addon` package ships Tempest as a hosted add-on on the [QuickNode Marketplace](https://marketplace.quicknode.com/) under the slug **`fabrknt-dynamic-fees`**.
+
+### API Endpoints
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/v1/volatility/compute` | POST | Compute realized volatility from an array of price observations |
+| `/v1/volatility/regime` | GET | Get current volatility regime classification for a pool |
+| `/v1/volatility/history` | POST | Retrieve historical volatility data points |
+| `/v1/fees/calculate` | POST | Calculate the dynamic fee for a given volatility level |
+| `/v1/fees/schedule` | GET | Get the full fee schedule mapping regimes to fee tiers |
+| `/v1/fees/simulate` | POST | Simulate fee revenue over a historical volatility series |
+| `/v1/lp/range` | POST | Get recommended LP tick range based on current volatility |
+| `/v1/lp/il-estimate` | POST | Estimate impermanent loss for a concentrated liquidity position |
+
+### Running the Add-on Locally
+
+```bash
+cd packages/qn-addon
+cp .env.example .env   # Configure as needed
+pnpm dev
+```
 
 ## Key Design Decisions
 
