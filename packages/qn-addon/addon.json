@@ -1,0 +1,63 @@
+{
+  "name": "Fabrknt Dynamic Fees",
+  "slug": "fabrknt-dynamic-fees",
+  "description": "Volatility-responsive dynamic fee engine for AMMs. Computes realized volatility, classifies market regimes, calculates optimal swap fees, recommends LP ranges, and estimates impermanent loss — all in real time.",
+  "version": "0.1.0",
+  "author": "Fabrknt",
+  "category": "DeFi",
+  "chains": ["solana", "ethereum"],
+  "healthcheck": "/healthcheck",
+  "provision_url": "/provision",
+  "deactivate_url": "/deactivate_endpoint",
+  "deprovision_url": "/deprovision",
+  "endpoints": [
+    {
+      "name": "Compute Volatility",
+      "path": "/v1/volatility/compute",
+      "method": "POST",
+      "description": "Compute realized volatility from an array of price observations"
+    },
+    {
+      "name": "Get Regime",
+      "path": "/v1/volatility/regime",
+      "method": "GET",
+      "description": "Get current volatility regime classification for a pool"
+    },
+    {
+      "name": "Volatility History",
+      "path": "/v1/volatility/history",
+      "method": "POST",
+      "description": "Retrieve historical volatility data points"
+    },
+    {
+      "name": "Calculate Fee",
+      "path": "/v1/fees/calculate",
+      "method": "POST",
+      "description": "Calculate the dynamic fee for a given volatility level"
+    },
+    {
+      "name": "Fee Schedule",
+      "path": "/v1/fees/schedule",
+      "method": "GET",
+      "description": "Get the full fee schedule mapping regimes to fee tiers"
+    },
+    {
+      "name": "Simulate Fees",
+      "path": "/v1/fees/simulate",
+      "method": "POST",
+      "description": "Simulate fee revenue over a historical volatility series"
+    },
+    {
+      "name": "LP Range",
+      "path": "/v1/lp/range",
+      "method": "POST",
+      "description": "Get recommended LP tick range based on current volatility"
+    },
+    {
+      "name": "IL Estimate",
+      "path": "/v1/lp/il-estimate",
+      "method": "POST",
+      "description": "Estimate impermanent loss for a concentrated liquidity position"
+    }
+  ]
+}

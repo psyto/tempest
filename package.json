@@ -1,7 +1,19 @@
 {
+  "name": "tempest",
+  "version": "0.1.0",
+  "description": "Volatility-responsive dynamic fee hook for Uniswap v4",
   "private": true,
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ]
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.31.0"
 }

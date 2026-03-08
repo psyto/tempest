@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@tempest/core": "0.1.0",
+    "@tempest/core": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
