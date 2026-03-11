@@ -89,12 +89,42 @@ export class EvmAdapter implements ChainAdapter {
     });
   }
 
-  async getKeeperReward(): Promise<bigint> {
-    return this.client.readContract({
+  async getKeeperRewardParams(): Promise<{
+    baseReward: bigint;
+    gasOverhead: bigint;
+    premiumBps: number;
+  }> {
+    const [baseReward, gasOverhead, premiumBps] = await Promise.all([
+      this.client.readContract({
+        address: this.hookAddress,
+        abi: TempestHookABI,
+        functionName: "keeperBaseReward",
+      }),
+      this.client.readContract({
+        address: this.hookAddress,
+        abi: TempestHookABI,
+        functionName: "keeperGasOverhead",
+      }),
+      this.client.readContract({
+        address: this.hookAddress,
+        abi: TempestHookABI,
+        functionName: "keeperPremiumBps",
+      }),
+    ]);
+    return {
+      baseReward,
+      gasOverhead,
+      premiumBps: Number(premiumBps),
+    };
+  }
+
+  async getStaleFeeThreshold(): Promise<number> {
+    const threshold = await this.client.readContract({
       address: this.hookAddress,
       abi: TempestHookABI,
-      functionName: "keeperReward",
+      functionName: "staleFeeThreshold",
     });
+    return Number(threshold);
   }
 
   async getMinUpdateInterval(): Promise<number> {

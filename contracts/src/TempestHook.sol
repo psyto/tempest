@@ -36,6 +36,7 @@ contract TempestHook is IHooks {
     error InsufficientObservations();
     error InvalidFeeConfig();
     error TransferFailed();
+    error InvalidStaleFeeThreshold();
 
     // ─── Events ────────────────────────────────────────────────────────────
 
@@ -50,8 +51,11 @@ contract TempestHook is IHooks {
     );
     event FeeConfigUpdated(PoolId indexed poolId);
     event GovernanceTransferred(address indexed oldGov, address indexed newGov);
-    event KeeperRewardUpdated(uint256 newReward);
+    event KeeperRewardUpdated(uint256 baseReward, uint256 gasOverhead, uint16 premiumBps);
     event MinUpdateIntervalUpdated(uint32 newInterval);
+    event StaleFeeThresholdUpdated(uint32 newThreshold);
+    event MinSwapSizeUpdated(PoolId indexed poolId, uint256 newMinSize);
+    event StaleFeeApplied(PoolId indexed poolId, uint24 fee);
 
     // ─── State ─────────────────────────────────────────────────────────────
 
@@ -64,18 +68,25 @@ contract TempestHook is IHooks {
 
     IPoolManager public immutable manager;
     address public governance;
-    uint256 public keeperReward; // Wei reward for calling updateVolatility
+    uint256 public keeperBaseReward; // Floor ETH reward for calling updateVolatility
+    uint256 public keeperGasOverhead; // Estimated gas units for updateVolatility tx
+    uint16 public keeperPremiumBps; // Profit margin over gas cost (bps, e.g. 5000 = 50%)
     uint32 public minUpdateInterval; // Min seconds between vol updates
+    uint32 public staleFeeThreshold; // Seconds before vol data is considered stale
 
     mapping(bytes32 => PoolState) internal _pools;
+    mapping(bytes32 => uint256) public minSwapSize; // Min abs(amount0) to record observation
 
     // ─── Constructor ───────────────────────────────────────────────────────
 
     constructor(IPoolManager _manager, address _governance) {
         manager = _manager;
         governance = _governance;
-        keeperReward = 0.001 ether;
+        keeperBaseReward = 0.0005 ether;
+        keeperGasOverhead = 150_000;
+        keeperPremiumBps = 5000; // 50% profit margin over gas cost
         minUpdateInterval = 300; // 5 minutes
+        staleFeeThreshold = 3600; // 1 hour
 
         Hooks.validateHookPermissions(
             IHooks(address(this)),
@@ -144,7 +155,18 @@ contract TempestHook is IHooks {
 
         uint24 fee;
         if (pool.initialized && pool.volState.lastUpdate > 0) {
-            fee = FeeCurve.getFee(pool.feeConfig, pool.volState.currentVol);
+            uint32 elapsed = uint32(block.timestamp) - pool.volState.lastUpdate;
+
+            // Fail-safe: if keeper is stale, escalate to cap fee to protect LPs
+            if (elapsed > staleFeeThreshold) {
+                fee = pool.feeConfig.fee5;
+                emit StaleFeeApplied(key.toId(), fee);
+            } else {
+                fee = FeeCurve.getFee(pool.feeConfig, pool.volState.currentVol);
+
+                // Momentum adjustment: boost fee when vol is accelerating
+                fee = _applyMomentum(fee, pool.volState.currentVol, pool.volState.ema7d, pool.feeConfig.fee5);
+            }
         } else {
             // Default fee before first vol update
             fee = 30; // 0.30%
@@ -161,13 +183,23 @@ contract TempestHook is IHooks {
         address,
         PoolKey calldata key,
         IPoolManager.SwapParams calldata,
-        BalanceDelta,
+        BalanceDelta delta,
         bytes calldata
     ) external override onlyPoolManager returns (bytes4, int128) {
         bytes32 id = PoolId.unwrap(key.toId());
         PoolState storage pool = _pools[id];
 
         if (pool.initialized) {
+            // Dust filter: skip observation if swap is too small
+            uint256 minSize = minSwapSize[id];
+            if (minSize > 0) {
+                int128 amount0 = delta.amount0();
+                uint256 absAmount = amount0 >= 0 ? uint256(uint128(amount0)) : uint256(uint128(-amount0));
+                if (absAmount < minSize) {
+                    return (IHooks.afterSwap.selector, 0);
+                }
+            }
+
             // Read current tick from pool state
             (, int24 tick,,) = manager.getSlot0(key.toId());
             pool.observations.record(tick, uint32(block.timestamp));
@@ -215,9 +247,10 @@ contract TempestHook is IHooks {
 
         emit VolatilityUpdated(poolId, newState.currentVol, newState.regime, newFee, sampleCount);
 
-        // Pay keeper reward
-        if (keeperReward > 0 && address(this).balance >= keeperReward) {
-            (bool ok,) = msg.sender.call{value: keeperReward}("");
+        // Pay keeper reward (dynamic: base + gas cost with premium)
+        uint256 reward = computeKeeperReward();
+        if (reward > 0 && address(this).balance >= reward) {
+            (bool ok,) = msg.sender.call{value: reward}("");
             if (!ok) revert TransferFailed();
         }
     }
@@ -237,14 +270,19 @@ contract TempestHook is IHooks {
         return (pool.volState.currentVol, pool.volState.regime, pool.volState.ema7d, pool.volState.ema30d);
     }
 
-    /// @notice Get the current dynamic fee for a pool
+    /// @notice Get the current dynamic fee for a pool (reflects staleness and momentum)
     function getCurrentFee(PoolId poolId) external view returns (uint24 feeBps) {
         bytes32 id = PoolId.unwrap(poolId);
         PoolState storage pool = _pools[id];
         if (!pool.initialized) revert PoolNotInitialized();
 
         if (pool.volState.lastUpdate == 0) return 30;
-        return FeeCurve.getFee(pool.feeConfig, pool.volState.currentVol);
+
+        uint32 elapsed = uint32(block.timestamp) - pool.volState.lastUpdate;
+        if (elapsed > staleFeeThreshold) return pool.feeConfig.fee5;
+
+        uint24 fee = FeeCurve.getFee(pool.feeConfig, pool.volState.currentVol);
+        return _applyMomentum(fee, pool.volState.currentVol, pool.volState.ema7d, pool.feeConfig.fee5);
     }
 
     /// @notice Get vol-adjusted LP range recommendation
@@ -289,10 +327,40 @@ contract TempestHook is IHooks {
         return _pools[id].volState;
     }
 
+    /// @notice Compute the current keeper reward based on gas price
+    /// @return reward Total reward in wei (base + gas cost with premium)
+    function computeKeeperReward() public view returns (uint256 reward) {
+        uint256 gasCost = keeperGasOverhead * tx.gasprice;
+        uint256 gasReward = (gasCost * (10_000 + keeperPremiumBps)) / 10_000;
+        reward = keeperBaseReward + gasReward;
+    }
+
     /// @notice Check if a pool is registered with this hook
     function isPoolInitialized(PoolId poolId) external view returns (bool) {
         bytes32 id = PoolId.unwrap(poolId);
         return _pools[id].initialized;
+    }
+
+    // ─── Internal Helpers ────────────────────────────────────────────────
+
+    /// @notice Apply a momentum-based fee boost when vol is accelerating above its EMA
+    /// @dev Boosts fee by up to 50% when currentVol is 2x+ the 7-day EMA, capped at maxFee
+    function _applyMomentum(uint24 baseFee, uint64 currentVol, uint64 ema7d, uint24 maxFee)
+        internal
+        pure
+        returns (uint24)
+    {
+        if (ema7d == 0 || currentVol <= ema7d) return baseFee;
+
+        // ratio = currentVol / ema7d (scaled by 100). Cap at 200 (2x).
+        uint256 ratio = (uint256(currentVol) * 100) / uint256(ema7d);
+        if (ratio > 200) ratio = 200;
+
+        // Boost = baseFee * (ratio - 100) / 200  →  up to +50% at 2x ratio
+        uint256 boost = (uint256(baseFee) * (ratio - 100)) / 200;
+        uint256 boosted = uint256(baseFee) + boost;
+
+        return boosted > uint256(maxFee) ? maxFee : uint24(boosted);
     }
 
     // ─── Governance Functions ──────────────────────────────────────────────
@@ -309,16 +377,42 @@ contract TempestHook is IHooks {
         emit FeeConfigUpdated(poolId);
     }
 
-    /// @notice Update keeper reward
-    function setKeeperReward(uint256 _reward) external onlyGovernance {
-        keeperReward = _reward;
-        emit KeeperRewardUpdated(_reward);
+    /// @notice Update keeper reward parameters
+    /// @param _baseReward Floor ETH reward regardless of gas price
+    /// @param _gasOverhead Estimated gas units for updateVolatility
+    /// @param _premiumBps Profit margin in bps over gas cost (e.g. 5000 = 50%)
+    function setKeeperReward(uint256 _baseReward, uint256 _gasOverhead, uint16 _premiumBps)
+        external
+        onlyGovernance
+    {
+        keeperBaseReward = _baseReward;
+        keeperGasOverhead = _gasOverhead;
+        keeperPremiumBps = _premiumBps;
+        emit KeeperRewardUpdated(_baseReward, _gasOverhead, _premiumBps);
     }
 
     /// @notice Update minimum update interval
     function setMinUpdateInterval(uint32 _interval) external onlyGovernance {
         minUpdateInterval = _interval;
         emit MinUpdateIntervalUpdated(_interval);
+    }
+
+    /// @notice Update stale fee threshold (fail-safe trigger)
+    /// @param _threshold Seconds after last vol update before fees escalate to cap
+    function setStaleFeeThreshold(uint32 _threshold) external onlyGovernance {
+        if (_threshold < minUpdateInterval) revert InvalidStaleFeeThreshold();
+        staleFeeThreshold = _threshold;
+        emit StaleFeeThresholdUpdated(_threshold);
+    }
+
+    /// @notice Set minimum swap size for a pool's observation recording (dust filter)
+    /// @param poolId The pool to configure
+    /// @param _minSize Minimum absolute amount0 delta to record an observation (0 = no filter)
+    function setMinSwapSize(PoolId poolId, uint256 _minSize) external onlyGovernance {
+        bytes32 id = PoolId.unwrap(poolId);
+        if (!_pools[id].initialized) revert PoolNotInitialized();
+        minSwapSize[id] = _minSize;
+        emit MinSwapSizeUpdated(poolId, _minSize);
     }
 
     /// @notice Transfer governance

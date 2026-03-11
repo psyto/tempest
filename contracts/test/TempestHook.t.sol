@@ -34,7 +34,9 @@ contract TempestHookTest is TempestTestBase {
     }
 
     function test_keeperReward() public view {
-        assertEq(hook.keeperReward(), 0.001 ether);
+        assertEq(hook.keeperBaseReward(), 0.0005 ether);
+        assertEq(hook.keeperGasOverhead(), 150_000);
+        assertEq(hook.keeperPremiumBps(), 5000);
     }
 
     function test_minUpdateInterval() public view {
@@ -44,14 +46,16 @@ contract TempestHookTest is TempestTestBase {
     // ─── Governance Functions ──────────────────────────────────────────
 
     function test_setKeeperReward() public {
-        hook.setKeeperReward(0.01 ether);
-        assertEq(hook.keeperReward(), 0.01 ether);
+        hook.setKeeperReward(0.01 ether, 200_000, 3000);
+        assertEq(hook.keeperBaseReward(), 0.01 ether);
+        assertEq(hook.keeperGasOverhead(), 200_000);
+        assertEq(hook.keeperPremiumBps(), 3000);
     }
 
     function test_setKeeperReward_onlyGovernance() public {
         vm.prank(address(0xdead));
         vm.expectRevert(TempestHook.OnlyGovernance.selector);
-        hook.setKeeperReward(0.01 ether);
+        hook.setKeeperReward(0.01 ether, 200_000, 3000);
     }
 
     function test_setMinUpdateInterval() public {

@@ -7,37 +7,70 @@ Tempest dynamically adjusts swap fees based on real-time realized volatility com
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  TempestHook.sol                  │
-│         (Uniswap v4 IHooks implementation)       │
-│                                                   │
-│  afterInitialize ── register pool with oracle     │
-│  afterSwap ─────── record tick to TickObserver    │
-│  beforeSwap ────── read vol → FeeCurve → fee      │
-│                                                   │
-│  ┌──────────────┐ ┌──────────────┐ ┌───────────┐ │
-│  │ TickObserver  │ │ VolatilityEng│ │ FeeCurve  │ │
-│  │ (lib)        │ │ (lib)        │ │ (lib)     │ │
-│  │              │ │              │ │           │ │
-│  │ Circular buf │ │ Realized vol │ │ Vol→Fee   │ │
-│  │ 4 obs/slot   │ │ Regime detect│ │ Piecewise │ │
-│  │              │ │ EMA smoothing│ │ linear    │ │
-│  └──────────────┘ └──────────────┘ └───────────┘ │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                     TempestHook.sol                       │
+│            (Uniswap v4 IHooks implementation)            │
+│                                                           │
+│  afterInitialize ── register pool with oracle             │
+│  afterSwap ─────── record tick (with dust filter)         │
+│  beforeSwap ────── vol → FeeCurve → momentum → fee        │
+│                    (+ staleness fail-safe)                 │
+│                                                           │
+│  ┌──────────────┐ ┌──────────────┐ ┌───────────────────┐ │
+│  │ TickObserver  │ │ VolatilityEng│ │ FeeCurve          │ │
+│  │ (lib)        │ │ (lib)        │ │ (lib)             │ │
+│  │              │ │              │ │                   │ │
+│  │ Circular buf │ │ Realized vol │ │ Vol→Fee piecewise │ │
+│  │ 4 obs/slot   │ │ Regime detect│ │ + momentum boost  │ │
+│  │              │ │ EMA smoothing│ │                   │ │
+│  └──────────────┘ └──────────────┘ └───────────────────┘ │
+└─────────────────────────────────────────────────────────┘
          │                    ▲
          │ tick data          │ updateVolatility()
          ▼                    │
     PoolManager          Keeper Service
-    (Uniswap v4)         (TypeScript)
+    (Uniswap v4)         (TypeScript, staleness-aware)
 ```
 
 ## How It Works
 
-1. **Every swap** — `afterSwap` records the current tick into a gas-optimized circular buffer (4 observations packed per storage slot, 1024 capacity)
-2. **Periodically** — A keeper calls `updateVolatility()`, which computes annualized realized vol from tick observations and classifies the market regime
-3. **Next swap** — `beforeSwap` reads the current vol regime and returns a dynamic fee via piecewise linear interpolation
+1. **Every swap** — `afterSwap` records the current tick into a gas-optimized circular buffer (4 observations packed per storage slot, 1024 capacity). Swaps below the pool's `minSwapSize` are filtered out to prevent dust-trade manipulation.
+2. **Periodically** — A keeper calls `updateVolatility()`, which computes annualized realized vol from tick observations and classifies the market regime. The keeper receives a dynamic ETH reward that scales with gas price to ensure profitability.
+3. **Next swap** — `beforeSwap` reads the current vol regime and returns a dynamic fee via piecewise linear interpolation, with a momentum boost when vol is accelerating above its 7-day EMA.
+4. **If the keeper goes down** — When `block.timestamp - lastUpdate > staleFeeThreshold` (default 1 hour), fees automatically escalate to the cap (500 bps) to protect LPs from arbitrage at stale, low fees.
 
 Since Uniswap v4 ticks are `log₁.₀₀₀₁(price)`, tick differences ARE log returns — no division needed for variance computation.
+
+## Resilience Mechanisms
+
+### Keeper Fail-Safe
+
+If no volatility update occurs within `staleFeeThreshold` (default 3600s), `beforeSwap` automatically returns the cap fee (`feeConfig.fee5`, default 500 bps). This protects LPs during keeper downtime — exactly when arbitrageurs are most active. The fail-safe clears as soon as the keeper submits a fresh `updateVolatility` call.
+
+### Dust Trade Filter
+
+Each pool has a configurable `minSwapSize` (default 0 = disabled). When set, `afterSwap` skips recording observations for swaps where `abs(delta.amount0) < minSwapSize`. This prevents attackers from injecting many tiny swaps at a manipulated tick to artificially suppress volatility.
+
+### Momentum Adjustment
+
+When `currentVol > ema7d`, the base fee from FeeCurve is boosted by up to 50% (capped at `fee5`). This provides faster fee response during vol spikes, partially compensating for the backward-looking nature of realized volatility. When vol is stable or declining, no adjustment is applied.
+
+### Dynamic Keeper Rewards
+
+The keeper reward scales with gas price to ensure profitability at any network congestion level:
+
+```
+reward = keeperBaseReward + keeperGasOverhead × tx.gasprice × (10000 + keeperPremiumBps) / 10000
+```
+
+| Gas Price | Reward (default params) |
+|-----------|------------------------|
+| 0 gwei | 0.0005 ETH (base only) |
+| 10 gwei | ~0.003 ETH |
+| 100 gwei | ~0.023 ETH |
+| 500 gwei | ~0.113 ETH |
+
+The keeper also overrides its gas limit when pools are approaching staleness (>80% of threshold), prioritizing LP protection over gas cost.
 
 ## Volatility Regimes
 
@@ -60,7 +93,7 @@ tempest/
 │   │       ├── TickObserver.sol
 │   │       ├── VolatilityEngine.sol
 │   │       └── FeeCurve.sol
-│   ├── test/               # 80 tests (unit + integration + fuzz)
+│   ├── test/               # 102 tests (unit + integration + scenario + fuzz)
 │   └── script/             # Deployment & CREATE2 mining
 ├── packages/
 │   ├── core/               # @tempest/core — chain-agnostic types, algorithms & client
@@ -122,10 +155,25 @@ Piecewise linear vol-to-fee mapping with 6 governance-adjustable control points.
 
 Main Uniswap v4 hook tying everything together:
 - `afterInitialize` — registers pool, requires `DYNAMIC_FEE_FLAG`
-- `beforeSwap` — returns dynamic fee with `OVERRIDE_FEE_FLAG`
-- `afterSwap` — records current tick to observation buffer
-- `updateVolatility` — keeper function, computes vol and pays reward
-- View functions for SDK: `getVolatility`, `getCurrentFee`, `getRecommendedRange`
+- `beforeSwap` — returns dynamic fee with `OVERRIDE_FEE_FLAG`, staleness fail-safe, momentum boost
+- `afterSwap` — records current tick to observation buffer (with dust filter)
+- `updateVolatility` — keeper function, computes vol and pays dynamic gas-scaled reward
+- `computeKeeperReward` — view function returning current reward amount at current gas price
+- View functions for SDK: `getVolatility`, `getCurrentFee`, `getRecommendedRange`, `getVolState`
+
+## Governance Parameters
+
+All parameters are adjustable by the governance address via dedicated setter functions.
+
+| Parameter | Default | Setter | Description |
+|-----------|---------|--------|-------------|
+| `keeperBaseReward` | 0.0005 ETH | `setKeeperReward()` | Floor ETH reward for keepers |
+| `keeperGasOverhead` | 150,000 | `setKeeperReward()` | Estimated gas units per `updateVolatility` call |
+| `keeperPremiumBps` | 5000 (50%) | `setKeeperReward()` | Profit margin over gas cost |
+| `minUpdateInterval` | 300s (5 min) | `setMinUpdateInterval()` | Min time between vol updates |
+| `staleFeeThreshold` | 3600s (1 hr) | `setStaleFeeThreshold()` | Time before fees escalate to cap |
+| `feeConfig` | See [Volatility Regimes](#volatility-regimes) | `setFeeConfig()` | Per-pool fee curve control points |
+| `minSwapSize` | 0 (disabled) | `setMinSwapSize()` | Per-pool min `abs(amount0)` to record observation |
 
 ## Getting Started
 
@@ -170,6 +218,13 @@ cd apps/keeper
 cp .env.example .env  # Configure RPC_URL, PRIVATE_KEY, HOOK_ADDRESS, POOL_IDS
 pnpm start
 ```
+
+The keeper automatically:
+- Checks gas price before each update and compares against `maxGasGwei`
+- Estimates reward profitability using on-chain parameters
+- Overrides gas limits when pools approach staleness (>80% of `staleFeeThreshold`)
+- Logs regime changes, actual gas used vs. estimated overhead, and profit margins
+- Warns on low keeper wallet balance
 
 ### Run Dashboard
 
@@ -232,9 +287,21 @@ class MySvmAdapter implements ChainAdapter {
    POOL_MANAGER=0x... GOVERNANCE=0x... DEPLOY_SALT=0x... forge script script/DeployTempest.s.sol --broadcast
    ```
 
+   Optional deploy-time env vars:
+   - `KEEPER_BASE_REWARD` — Floor reward in wei (default: 0.0005 ETH)
+   - `KEEPER_GAS_OVERHEAD` — Estimated gas units (default: 150000)
+   - `KEEPER_PREMIUM_BPS` — Profit margin bps (default: 5000)
+   - `INITIAL_FUNDING` — ETH to seed the hook's reward fund (default: 1 ETH)
+
 3. **Create pool** — Initialize a Uniswap v4 pool with `fee: LPFeeLibrary.DYNAMIC_FEE_FLAG` and `hooks: <tempest_address>`
 
-4. **Start keeper** — Run the keeper service to periodically update volatility
+4. **Configure pool** (optional) — Set per-pool parameters via governance:
+   ```solidity
+   hook.setMinSwapSize(poolId, 1e16);  // 0.01 ETH dust filter
+   hook.setFeeConfig(poolId, customConfig);
+   ```
+
+5. **Start keeper** — Run the keeper service to periodically update volatility
 
 ## QuickNode Marketplace Add-on
 
@@ -265,7 +332,11 @@ pnpm dev
 
 - **Tick-based vol**: Uniswap v4 ticks are logarithmic, so tick diffs = log returns. No expensive division.
 - **Packed storage**: 4 observations per slot cuts storage costs by ~75%.
-- **Keeper pattern**: Vol computation is too expensive for every swap. Off-chain keeper amortizes the cost, incentivized by ETH rewards.
+- **Keeper pattern**: Vol computation is too expensive for every swap. Off-chain keeper amortizes the cost, incentivized by gas-scaled ETH rewards.
+- **Dynamic rewards**: Keeper reward = base + gas overhead x gas price x premium. Ensures keeper profitability at any gas price, preventing the "keeper goes down during high gas" failure mode.
+- **Staleness fail-safe**: If the keeper stops updating, fees automatically escalate to cap. LPs are never left exposed at stale low fees during market turmoil.
+- **Dust filter**: Per-pool `minSwapSize` prevents vol manipulation via cheap tiny swaps that inject artificial tick observations.
+- **Momentum boost**: Fee adjusts up to 50% faster when vol is accelerating (currentVol > ema7d), partially compensating for the backward-looking nature of realized volatility.
 - **Piecewise linear fees**: Simple, predictable, governance-adjustable. No complex curves or oracles.
 - **No external oracles**: All data comes from the pool's own swap history. Fully self-contained.
 - **Chain-agnostic core**: Pure types and algorithms in `@tempest/core` can be used without any EVM dependency, enabling reuse in simulations, dashboards, or other chain integrations.

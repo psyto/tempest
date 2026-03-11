@@ -74,10 +74,45 @@ export const TempestHookABI = [
     outputs: [{ name: "", type: "address" }],
   },
   {
-    name: "keeperReward",
+    name: "keeperBaseReward",
     type: "function",
     stateMutability: "view",
     inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "keeperGasOverhead",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "keeperPremiumBps",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint16" }],
+  },
+  {
+    name: "computeKeeperReward",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "reward", type: "uint256" }],
+  },
+  {
+    name: "staleFeeThreshold",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint32" }],
+  },
+  {
+    name: "minSwapSize",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "bytes32" }],
     outputs: [{ name: "", type: "uint256" }],
   },
   {
@@ -126,7 +161,28 @@ export const TempestHookABI = [
     name: "setKeeperReward",
     type: "function",
     stateMutability: "nonpayable",
-    inputs: [{ name: "_reward", type: "uint256" }],
+    inputs: [
+      { name: "_baseReward", type: "uint256" },
+      { name: "_gasOverhead", type: "uint256" },
+      { name: "_premiumBps", type: "uint16" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "setStaleFeeThreshold",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "_threshold", type: "uint32" }],
+    outputs: [],
+  },
+  {
+    name: "setMinSwapSize",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "poolId", type: "bytes32" },
+      { name: "_minSize", type: "uint256" },
+    ],
     outputs: [],
   },
   {
@@ -183,6 +239,29 @@ export const TempestHookABI = [
     inputs: [
       { name: "oldGov", type: "address", indexed: true },
       { name: "newGov", type: "address", indexed: true },
+    ],
+  },
+  {
+    name: "StaleFeeApplied",
+    type: "event",
+    inputs: [
+      { name: "poolId", type: "bytes32", indexed: true },
+      { name: "fee", type: "uint24", indexed: false },
+    ],
+  },
+  {
+    name: "StaleFeeThresholdUpdated",
+    type: "event",
+    inputs: [
+      { name: "newThreshold", type: "uint32", indexed: false },
+    ],
+  },
+  {
+    name: "MinSwapSizeUpdated",
+    type: "event",
+    inputs: [
+      { name: "poolId", type: "bytes32", indexed: true },
+      { name: "newMinSize", type: "uint256", indexed: false },
     ],
   },
 ] as const;

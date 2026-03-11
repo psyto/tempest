@@ -13,7 +13,9 @@ contract DeployTempest is Script {
         address poolManager = vm.envAddress("POOL_MANAGER");
         address governance = vm.envAddress("GOVERNANCE");
         bytes32 salt = vm.envBytes32("DEPLOY_SALT");
-        uint256 keeperReward = vm.envOr("KEEPER_REWARD", uint256(0.001 ether));
+        uint256 keeperBaseReward = vm.envOr("KEEPER_BASE_REWARD", uint256(0.0005 ether));
+        uint256 keeperGasOverhead = vm.envOr("KEEPER_GAS_OVERHEAD", uint256(150_000));
+        uint16 keeperPremiumBps = uint16(vm.envOr("KEEPER_PREMIUM_BPS", uint256(5000)));
         uint256 initialFunding = vm.envOr("INITIAL_FUNDING", uint256(1 ether));
 
         console2.log("=== Deploying TempestHook ===");
@@ -54,8 +56,10 @@ contract DeployTempest is Script {
         console2.log("Hook permissions validated successfully");
 
         // Configure keeper reward
-        hook.setKeeperReward(keeperReward);
-        console2.log("Keeper reward set to:", keeperReward);
+        hook.setKeeperReward(keeperBaseReward, keeperGasOverhead, keeperPremiumBps);
+        console2.log("Keeper base reward:", keeperBaseReward);
+        console2.log("Keeper gas overhead:", keeperGasOverhead);
+        console2.log("Keeper premium bps:", keeperPremiumBps);
 
         // Fund hook for keeper rewards
         if (initialFunding > 0) {
