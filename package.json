@@ -4,7 +4,7 @@
   "description": "Volatility-responsive dynamic fee hook for Uniswap v4",
   "private": true,
   "scripts": {
-    "prepare": "pnpm run build",
+    "prepare": "cd packages/core && pnpm run build",
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint"
