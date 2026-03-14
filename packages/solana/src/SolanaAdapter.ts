@@ -1,6 +1,6 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import type { ChainAdapter, Chain, VolState, RecommendedRange } from "@tempest/core";
-import { Regime } from "@tempest/core";
+import type { ChainAdapter, Chain, VolState, RecommendedRange } from "@fabrknt/tempest-core";
+import { Regime } from "@fabrknt/tempest-core";
 import { TEMPEST_PROGRAM_ID, findVolStatePDA, findFeeConfigPDA } from "./pda.js";
 import type { OnChainVolState } from "./accounts.js";
 
@@ -45,9 +45,9 @@ export class SolanaAdapter implements ChainAdapter {
 
   async getCurrentFee(poolId: string): Promise<number> {
     const state = await this.getVolState(poolId);
-    // Once we can read vol state, use @tempest/core's interpolateFee()
+    // Once we can read vol state, use @fabrknt/tempest-core's interpolateFee()
     // to compute the fee locally (same math as the on-chain program).
-    const { interpolateFee } = await import("@tempest/core");
+    const { interpolateFee } = await import("@fabrknt/tempest-core");
     return interpolateFee(Number(state.currentVol));
   }
 

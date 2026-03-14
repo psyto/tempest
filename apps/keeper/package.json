@@ -1,6 +1,6 @@
 {
-  "name": "@tempest/keeper",
-  "version": "0.1.0",
+  "name": "@fabrknt/tempest-keeper",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
-    "@tempest/evm": "workspace:*",
+    "@fabrknt/tempest-evm": "workspace:*",
     "viem": "^2.21.0",
     "dotenv": "^16.4.0"
   },

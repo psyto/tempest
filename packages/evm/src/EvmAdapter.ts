@@ -1,8 +1,8 @@
 import type { PublicClient, Address } from "viem";
-import type { Chain, ChainAdapter } from "@tempest/core";
+import type { Chain, ChainAdapter } from "@fabrknt/tempest-core";
 import { TempestHookABI } from "./abis/TempestHook.js";
-import type { VolState, RecommendedRange } from "@tempest/core";
-import { Regime } from "@tempest/core";
+import type { VolState, RecommendedRange } from "@fabrknt/tempest-core";
+import { Regime } from "@fabrknt/tempest-core";
 
 /**
  * EVM implementation of the Tempest ChainAdapter.

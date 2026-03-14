@@ -1,8 +1,12 @@
 {
-  "name": "@tempest/qn-addon",
-  "version": "0.1.0",
+  "name": "@fabrknt/tempest-qn-addon",
+  "version": "1.0.0",
   "description": "Fabrknt Dynamic Fees — QuickNode Marketplace add-on for volatility-responsive AMM fees",
   "main": "dist/server.js",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
@@ -16,7 +20,7 @@
     "better-sqlite3": "^11.10.0",
     "dotenv": "^16.3.1",
     "morgan": "^1.10.0",
-    "@tempest/core": "workspace:*"
+    "@fabrknt/tempest-core": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

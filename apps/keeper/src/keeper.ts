@@ -11,7 +11,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet, sepolia } from "viem/chains";
-import { TempestHookABI, REGIME_NAMES } from "@tempest/evm";
+import { TempestHookABI, REGIME_NAMES } from "@fabrknt/tempest-evm";
 import type { KeeperConfig } from "./config.js";
 import { shouldUpdate, checkProfitability } from "./gas-oracle.js";
 

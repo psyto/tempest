@@ -20,4 +20,4 @@ export {
   type PoolInfo,
   type VolSample,
   type RecommendedRange,
-} from "@tempest/core";
+} from "@fabrknt/tempest-core";

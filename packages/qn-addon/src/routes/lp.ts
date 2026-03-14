@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { instanceLookup } from "../middleware/instance-lookup";
-import { Regime, REGIME_NAMES, estimateIL, classifyRegime } from "@tempest/core";
+import { Regime, REGIME_NAMES, estimateIL, classifyRegime } from "@fabrknt/tempest-core";
 
 const router: import("express").Router = Router();
 
@@ -103,7 +103,7 @@ router.post("/il-estimate", (req: Request, res: Response) => {
 
     const days = holdingPeriodDays ?? 30;
 
-    // Use @tempest/core estimateIL
+    // Use @fabrknt/tempest-core estimateIL
     const ilPercent = estimateIL(volBps, rangeLower, rangeUpper, days);
 
     // Classify regime for context

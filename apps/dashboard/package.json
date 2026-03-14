@@ -1,6 +1,6 @@
 {
-  "name": "@tempest/dashboard",
-  "version": "0.1.0",
+  "name": "@fabrknt/tempest-dashboard",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@tempest/core": "workspace:*",
+    "@fabrknt/tempest-core": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

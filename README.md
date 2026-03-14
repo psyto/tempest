@@ -96,26 +96,26 @@ tempest/
 │   ├── test/               # 102 tests (unit + integration + scenario + fuzz)
 │   └── script/             # Deployment & CREATE2 mining
 ├── packages/
-│   ├── core/               # @tempest/core — chain-agnostic types, algorithms & client
+│   ├── core/               # @fabrknt/tempest-core — chain-agnostic types, algorithms & client
 │   │   └── src/
 │   │       ├── types.ts    # Regime, VolState, FeeConfig, PoolInfo, VolSample
 │   │       ├── adapter.ts  # Chain, ChainAdapter interface
 │   │       ├── client.ts   # TempestClient (chain-agnostic, accepts any ChainAdapter)
 │   │       ├── fees.ts     # classifyRegime(), interpolateFee()
 │   │       └── lp.ts       # estimateIL() — concentrated liquidity IL estimation
-│   ├── evm/                # @tempest/evm — EVM adapter (depends on @tempest/core + viem)
+│   ├── evm/                # @fabrknt/tempest-evm — EVM adapter (depends on @fabrknt/tempest-core + viem)
 │   │   └── src/
 │   │       ├── EvmAdapter.ts      # ChainAdapter implementation for EVM/viem
 │   │       ├── fees.ts            # getCurrentFee()
 │   │       ├── oracle.ts          # getVolatility(), getRegime(), getVolState()
 │   │       ├── lp.ts              # getRecommendedRange()
 │   │       └── abis/              # Contract ABIs
-│   ├── solana/              # @tempest/solana — Solana adapter scaffold
+│   ├── solana/              # @fabrknt/tempest-solana — Solana adapter scaffold
 │   │   └── src/
 │   │       ├── SolanaAdapter.ts   # ChainAdapter implementation (awaiting program deployment)
 │   │       ├── pda.ts             # PDA derivation (vol_state, fee_config, tick_buffer)
 │   │       └── accounts.ts       # Expected on-chain account structures
-│   └── qn-addon/            # @tempest/qn-addon — QuickNode Marketplace add-on
+│   └── qn-addon/            # @fabrknt/tempest-qn-addon — QuickNode Marketplace add-on
 │       ├── addon.json        # QN Marketplace manifest (slug: fabrknt-dynamic-fees)
 │       └── src/
 │           └── server.ts     # Express API (volatility, fees, LP advisory routes)
@@ -128,10 +128,10 @@ The monorepo is managed with **pnpm** (v10.31.0) and **turbo** for build orchest
 
 The SDK is split into three packages:
 
-- **`@tempest/core`** — Chain-agnostic types, algorithms, and client with zero dependencies. Defines the `ChainAdapter` interface and a `TempestClient` that accepts any adapter. Use this when you only need volatility types (e.g., `Regime`, `VolState`), pure math (`estimateIL`), or want to build a custom chain adapter.
-- **`@tempest/evm`** — EVM adapter implementing `ChainAdapter` via viem. Depends on `@tempest/core` and re-exports all of its types for convenience.
-- **`@tempest/solana`** — Solana adapter scaffold implementing `ChainAdapter`. Includes PDA derivation and expected on-chain account structures. Awaiting Solana program deployment.
-- **`@tempest/qn-addon`** — QuickNode Marketplace add-on (slug: `fabrknt-dynamic-fees`). An Express server exposing Tempest's volatility engine as a hosted API. Depends on `@tempest/core`.
+- **`@fabrknt/tempest-core`** — Chain-agnostic types, algorithms, and client with zero dependencies. Defines the `ChainAdapter` interface and a `TempestClient` that accepts any adapter. Use this when you only need volatility types (e.g., `Regime`, `VolState`), pure math (`estimateIL`), or want to build a custom chain adapter.
+- **`@fabrknt/tempest-evm`** — EVM adapter implementing `ChainAdapter` via viem. Depends on `@fabrknt/tempest-core` and re-exports all of its types for convenience.
+- **`@fabrknt/tempest-solana`** — Solana adapter scaffold implementing `ChainAdapter`. Includes PDA derivation and expected on-chain account structures. Awaiting Solana program deployment.
+- **`@fabrknt/tempest-qn-addon`** — QuickNode Marketplace add-on (slug: `fabrknt-dynamic-fees`). An Express server exposing Tempest's volatility engine as a hosted API. Depends on `@fabrknt/tempest-core`.
 
 ## Contracts
 
@@ -233,25 +233,25 @@ cd apps/dashboard
 pnpm run dev
 ```
 
-The dashboard runs with mock data by default — connect it to a deployed hook via `@tempest/evm` for live data.
+The dashboard runs with mock data by default — connect it to a deployed hook via `@fabrknt/tempest-evm` for live data.
 
 ### SDK Usage
 
-Use `@tempest/core` for pure types and algorithms (no chain dependency):
+Use `@fabrknt/tempest-core` for pure types and algorithms (no chain dependency):
 
 ```typescript
-import { Regime, REGIME_NAMES, estimateIL } from "@tempest/core";
+import { Regime, REGIME_NAMES, estimateIL } from "@fabrknt/tempest-core";
 
 const il = estimateIL(5000, -1000, 1000, 30); // 30-day IL estimate at 50% vol
 console.log(`Estimated IL: ${il.toFixed(2)}%`);
 ```
 
-Use `@tempest/evm` for on-chain reads via viem:
+Use `@fabrknt/tempest-evm` for on-chain reads via viem:
 
 ```typescript
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
-import { TempestClient, EvmAdapter } from "@tempest/evm";
+import { TempestClient, EvmAdapter } from "@fabrknt/tempest-evm";
 
 const viem = createPublicClient({ chain: mainnet, transport: http() });
 const adapter = new EvmAdapter(viem, "0x...");
@@ -262,10 +262,10 @@ const fee = await tempest.getCurrentFee(poolId);
 const range = await tempest.getRecommendedRange(poolId, currentTick);
 ```
 
-To add support for a new chain, implement the `ChainAdapter` interface from `@tempest/core`:
+To add support for a new chain, implement the `ChainAdapter` interface from `@fabrknt/tempest-core`:
 
 ```typescript
-import type { ChainAdapter } from "@tempest/core";
+import type { ChainAdapter } from "@fabrknt/tempest-core";
 
 class MySvmAdapter implements ChainAdapter {
   readonly chain = "solana";
@@ -339,7 +339,7 @@ pnpm dev
 - **Momentum boost**: Fee adjusts up to 50% faster when vol is accelerating (currentVol > ema7d), partially compensating for the backward-looking nature of realized volatility.
 - **Piecewise linear fees**: Simple, predictable, governance-adjustable. No complex curves or oracles.
 - **No external oracles**: All data comes from the pool's own swap history. Fully self-contained.
-- **Chain-agnostic core**: Pure types and algorithms in `@tempest/core` can be used without any EVM dependency, enabling reuse in simulations, dashboards, or other chain integrations.
+- **Chain-agnostic core**: Pure types and algorithms in `@fabrknt/tempest-core` can be used without any EVM dependency, enabling reuse in simulations, dashboards, or other chain integrations.
 
 ## License
 

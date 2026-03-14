@@ -1,7 +1,7 @@
 import type { PublicKey } from "@solana/web3.js";
 
 /**
- * On-chain regime enum (matches @tempest/core Regime).
+ * On-chain regime enum (matches @fabrknt/tempest-core Regime).
  */
 export enum OnChainRegime {
   VeryLow = 0,

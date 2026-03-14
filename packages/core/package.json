@@ -1,8 +1,12 @@
 {
-  "name": "@tempest/core",
-  "version": "0.1.0",
+  "name": "@fabrknt/tempest-core",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",

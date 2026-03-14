@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { instanceLookup } from "../middleware/instance-lookup";
-import { Regime, REGIME_NAMES, classifyRegime } from "@tempest/core";
+import { Regime, REGIME_NAMES, classifyRegime } from "@fabrknt/tempest-core";
 
 const router: import("express").Router = Router();
 
@@ -29,7 +29,7 @@ router.post("/compute", (req: Request, res: Response) => {
     const window = windowSeconds ?? 86400; // default 24h
 
     // --- Mock computation ---
-    // In production this delegates to @tempest/core vol computation
+    // In production this delegates to @fabrknt/tempest-core vol computation
     const logReturns: number[] = [];
     for (let i = 1; i < prices.length; i++) {
       logReturns.push(Math.log(prices[i] / prices[i - 1]));

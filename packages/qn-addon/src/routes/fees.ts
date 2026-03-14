@@ -7,7 +7,7 @@ import {
   interpolateFee,
   DEFAULT_FEE_CONFIG,
   type FeeConfig,
-} from "@tempest/core";
+} from "@fabrknt/tempest-core";
 
 const router: import("express").Router = Router();
 

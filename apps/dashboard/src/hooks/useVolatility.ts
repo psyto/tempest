@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Regime, REGIME_NAMES, REGIME_COLORS } from "@tempest/core";
+import { Regime, REGIME_NAMES, REGIME_COLORS } from "@fabrknt/tempest-core";
 
 export { Regime, REGIME_NAMES, REGIME_COLORS };
 

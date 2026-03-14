@@ -1,14 +1,18 @@
 {
-  "name": "@tempest/evm",
-  "version": "0.1.0",
+  "name": "@fabrknt/tempest-evm",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc"
   },
   "dependencies": {
-    "@tempest/core": "workspace:*"
+    "@fabrknt/tempest-core": "workspace:*"
   },
   "peerDependencies": {
     "viem": "^2.0.0"

@@ -1,15 +1,19 @@
 {
-  "name": "@tempest/solana",
-  "version": "0.1.0",
+  "name": "@fabrknt/tempest-solana",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@tempest/core": "workspace:*",
+    "@fabrknt/tempest-core": "workspace:*",
     "@solana/web3.js": "^1.95.0"
   },
   "devDependencies": {
