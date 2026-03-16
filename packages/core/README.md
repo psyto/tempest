@@ -1,5 +1,8 @@
 # @fabrknt/tempest-core
 
+[![npm version](https://img.shields.io/npm/v/@fabrknt/tempest-core.svg)](https://www.npmjs.com/package/@fabrknt/tempest-core)
+[![npm downloads](https://img.shields.io/npm/dm/@fabrknt/tempest-core.svg)](https://www.npmjs.com/package/@fabrknt/tempest-core)
+
 Chain-agnostic types, algorithms, and client for Tempest -- volatility-responsive dynamic fee management for AMMs.
 
 Not every DeFi protocol needs TradFi compliance -- but if yours does, you shouldn't have to rebuild from scratch. Fabrknt plugs into your existing protocol with composable SDKs and APIs. No permissioned forks, no separate deployments.
