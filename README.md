@@ -1,6 +1,11 @@
 # Tempest
 
+[![npm version](https://img.shields.io/npm/v/@fabrknt/tempest-core.svg)](https://www.npmjs.com/package/@fabrknt/tempest-core)
+[![npm downloads](https://img.shields.io/npm/dm/@fabrknt/tempest-core.svg)](https://www.npmjs.com/package/@fabrknt/tempest-core)
+
 Volatility-responsive dynamic fee hook for Uniswap v4.
+
+Part of [Fabrknt](https://fabrknt.com) — plug-in compliance for existing DeFi protocols. `npm install @fabrknt/tempest-core`
 
 Tempest dynamically adjusts swap fees based on real-time realized volatility computed from pool swap data. All existing AMMs use static or manually-adjusted fees — Tempest automates this, protecting LPs during vol spikes and attracting volume during calm markets.
 
